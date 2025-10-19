@@ -1,0 +1,151 @@
+{
+  "name": "Vistoria Bot (Telegram + Supabase) - FIX",
+  "nodes": [
+    {
+      "id": "telegram_trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [-40, 0],
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "id": "get_rows",
+      "name": "Get row(s)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [220, -120],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "0nirjSTshTd9obPa",
+          "mode": "list",
+          "cachedResultName": "Users",
+          "cachedResultUrl": "/projects/afiVhyE6MHlxcJZa/datatables/0nirjSTshTd9obPa"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id_telegram_user",
+              "keyValue": "={{ $('Telegram Trigger').item.json.message.from.id.toString() }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "check_user",
+      "name": "Check User",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Tentar verificar se o usuário foi encontrado\nlet userFound = false;\n\ntry {\n  const getRowsNode = $('Get row(s)');\n  if (getRowsNode && getRowsNode.all()) {\n    userFound = getRowsNode.all().length > 0;\n  }\n} catch (error) {\n  // Se Get row(s) não tem dados, userFound permanece false\n  userFound = false;\n}\n\n// Retornar os dados necessários\nreturn [\n  {\n    json: {\n      user_found: userFound,\n      telegram_data: $input.first().json\n    }\n  }\n];"
+      }
+    },
+    {
+      "id": "if_check",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [540, 0],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.user_found }}",
+              "rightValue": "={{ false }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "send_denied",
+      "name": "Send a text message (Denied)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [700, -100],
+      "parameters": {
+        "chatId": "={{ $json.telegram_data.message.chat.id }}",
+        "text": "Você não tem permissão para utilizar este ChatBot.",
+        "additionalFields": { "appendAttribution": false }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "id": "send_allowed",
+      "name": "Send a text message (Allowed)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [700, 100],
+      "parameters": {
+        "chatId": "={{ $json.telegram_data.message.chat.id }}",
+        "text": "Você tem permissão para utilizar este ChatBot.",
+        "additionalFields": { "appendAttribution": false }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          { "node": "Get row(s)", "type": "main", "index": 0 },
+          { "node": "Check User", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check User": {
+      "main": [
+        [
+          { "node": "If", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+
+    "If": {
+      "main": [
+        [
+          { "node": "Send a text message (Denied)", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Send a text message (Allowed)", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" }
+}
