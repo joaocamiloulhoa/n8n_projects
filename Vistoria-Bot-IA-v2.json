@@ -1,0 +1,588 @@
+{
+  "name": "Vistoria Bot IA - Sistema de Sessão Completo",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "telegram_trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300],
+      "webhookId": "unique-webhook-id",
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "0nirjSTshTd9obPa",
+          "mode": "list",
+          "cachedResultName": "Users"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id_telegram_user",
+              "keyValue": "={{ $json.message.from.id.toString() }}"
+            }
+          ]
+        }
+      },
+      "id": "get_user",
+      "name": "Get User",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [320, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// SISTEMA DE GERENCIAMENTO DE SESSÃO DE VISTORIA\n// Autor: Sistema IA - Orquestrador de Chat\n// Versão: 2.0\n\nconst msg = $input.first().json.message;\nconst chatId = msg.chat.id.toString();\nconst userId = msg.from.id.toString();\nconst username = msg.from.username || 'unknown';\nconst messageText = msg.text || '';\nconst timestamp = new Date().toISOString();\n\n// Verificar se usuário foi encontrado\nlet userFound = false;\ntry {\n  const getUserNode = $('Get User');\n  if (getUserNode && getUserNode.all().length > 0) {\n    userFound = true;\n  }\n} catch (error) {\n  userFound = false;\n}\n\nif (!userFound) {\n  return [{\n    json: {\n      action: 'deny',\n      chat_id: chatId,\n      message: '❌ Você não tem permissão para utilizar este ChatBot.'\n    }\n  }];\n}\n\n// DETECÇÃO DE COMANDOS\nconst startMatch = messageText.match(/\\/start[-_]?([A-Za-z0-9\\-\\_]+)/);\nconst isEndCommand = /\\/end/i.test(messageText);\n\n// RECUPERAR ESTADO DA SESSÃO (simulação - em produção usar banco)\n// Por enquanto, vamos usar o próprio fluxo do n8n\nlet state = {\n  session_open: false,\n  vistoria_id: null,\n  opened_at: null,\n  messages: []\n};\n\n// Tentar recuperar sessão ativa do banco (iremos implementar)\ntry {\n  const activeSession = $('Get Active Session');\n  if (activeSession && activeSession.all().length > 0) {\n    const sessionData = activeSession.first().json;\n    state = {\n      session_open: true,\n      vistoria_id: sessionData.vistoria_id,\n      opened_at: sessionData.opened_at,\n      messages: JSON.parse(sessionData.messages_json || '[]')\n    };\n  }\n} catch (error) {\n  // Primeira execução ou sem sessão ativa\n}\n\n// PROCESSAMENTO DE COMANDOS\n\n// 1. COMANDO /start-<ID>\nif (startMatch) {\n  const newVistoriaId = startMatch[1];\n  \n  // Se já havia sessão aberta, precisamos fechar primeiro\n  if (state.session_open) {\n    return [{\n      json: {\n        action: 'close_and_reopen',\n        chat_id: chatId,\n        user_id: userId,\n        username: username,\n        old_vistoria_id: state.vistoria_id,\n        old_opened_at: state.opened_at,\n        old_messages: state.messages,\n        new_vistoria_id: newVistoriaId,\n        timestamp: timestamp\n      }\n    }];\n  }\n  \n  // Abrir nova sessão\n  return [{\n    json: {\n      action: 'start',\n      chat_id: chatId,\n      user_id: userId,\n      username: username,\n      vistoria_id: newVistoriaId,\n      opened_at: timestamp,\n      message: `✅ Sessão aberta para a vistoria ${newVistoriaId}.\\n\\n📝 Envie suas observações.\\n🔚 Para finalizar, digite /end.`\n    }\n  }];\n}\n\n// 2. COMANDO /end\nif (isEndCommand) {\n  if (!state.session_open) {\n    return [{\n      json: {\n        action: 'end_no_session',\n        chat_id: chatId,\n        message: '⚠️ Não há sessão ativa. Use /start-<ID> para iniciar uma nova vistoria.'\n      }\n    }];\n  }\n  \n  // Fechar sessão\n  return [{\n    json: {\n      action: 'end',\n      chat_id: chatId,\n      user_id: userId,\n      username: username,\n      vistoria_id: state.vistoria_id,\n      opened_at: state.opened_at,\n      closed_at: timestamp,\n      messages: state.messages\n    }\n  }];\n}\n\n// 3. MENSAGEM COMUM (coleta)\nif (state.session_open) {\n  // Detectar tipo de mensagem\n  let kind = 'text';\n  let content = messageText;\n  let meta = {};\n  \n  if (msg.voice) {\n    kind = 'audio';\n    content = '[Áudio recebido - transcrição pendente]';\n    meta = { file_id: msg.voice.file_id, duration: msg.voice.duration };\n  } else if (msg.photo) {\n    kind = 'image';\n    content = msg.caption || '[Imagem sem legenda]';\n    meta = { file_id: msg.photo[msg.photo.length - 1].file_id };\n  } else if (msg.document) {\n    kind = 'doc';\n    content = msg.caption || '[Documento]';\n    meta = { file_id: msg.document.file_id, mime: msg.document.mime_type, size: msg.document.file_size };\n  } else if (msg.location) {\n    kind = 'location';\n    content = `Localização: ${msg.location.latitude}, ${msg.location.longitude}`;\n    meta = { lat: msg.location.latitude, lon: msg.location.longitude };\n  }\n  \n  const newMessage = {\n    idx: state.messages.length + 1,\n    ts: timestamp,\n    kind: kind,\n    content: content,\n    meta: meta\n  };\n  \n  state.messages.push(newMessage);\n  \n  return [{\n    json: {\n      action: 'collect',\n      chat_id: chatId,\n      user_id: userId,\n      vistoria_id: state.vistoria_id,\n      opened_at: state.opened_at,\n      messages: state.messages,\n      current_message: newMessage,\n      confirmation: '📝 Anotado.'\n    }\n  }];\n}\n\n// 4. MENSAGEM SEM SESSÃO ATIVA\nreturn [{\n  json: {\n    action: 'no_session',\n    chat_id: chatId,\n    message: '⚠️ Nenhuma sessão ativa. Use /start-<ID> para iniciar uma vistoria.'\n  }\n}];"
+      },
+      "id": "session_manager",
+      "name": "Session Manager",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 300]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "options": {},
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "deny_condition",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "deny",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "deny"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "start_condition",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "start",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "start"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "collect_condition",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "collect",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "collect"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "end_condition",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "end",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "end"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "no_session_condition",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "no_session",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "no_session"
+            }
+          ]
+        }
+      },
+      "id": "router_action",
+      "name": "Router Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [760, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "id": "send_denied",
+      "name": "Send Denied",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [980, 100],
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "SESSIONS_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "Vistoria_Sessions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "vistoria_id": "={{ $json.vistoria_id }}",
+            "chat_id": "={{ $json.chat_id }}",
+            "user_id": "={{ $json.user_id }}",
+            "username": "={{ $json.username }}",
+            "opened_at": "={{ $json.opened_at }}",
+            "status": "ativa",
+            "messages_json": "[]"
+          }
+        }
+      },
+      "id": "create_session",
+      "name": "Create Session",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [980, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "id": "send_session_started",
+      "name": "Send Session Started",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1200, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "SESSIONS_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "Vistoria_Sessions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "messages_json": "={{ JSON.stringify($json.messages) }}"
+          }
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "vistoria_id",
+              "keyValue": "={{ $json.vistoria_id }}"
+            },
+            {
+              "keyName": "status",
+              "keyValue": "ativa"
+            }
+          ]
+        }
+      },
+      "id": "update_session",
+      "name": "Update Session Messages",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [980, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.confirmation }}",
+        "additionalFields": {}
+      },
+      "id": "send_collected",
+      "name": "Send Collected Confirmation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1200, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// CONSOLIDADOR DE MATERIAL ÚNICO PARA IA\n// Gera material estruturado + payload para banco de dados\n\nconst data = $input.first().json;\nconst vistoriaId = data.vistoria_id;\nconst chatId = data.chat_id;\nconst userId = data.user_id;\nconst username = data.username || 'unknown';\nconst openedAt = data.opened_at;\nconst closedAt = data.closed_at;\nconst messages = data.messages || [];\n\n// ESTATÍSTICAS\nconst stats = {\n  total: messages.length,\n  texto: messages.filter(m => m.kind === 'text').length,\n  audio: messages.filter(m => m.kind === 'audio').length,\n  imagem: messages.filter(m => m.kind === 'image').length,\n  doc: messages.filter(m => m.kind === 'doc').length,\n  location: messages.filter(m => m.kind === 'location').length\n};\n\n// CONSTRUIR MATERIAL ÚNICO MARKDOWN\nlet materialMarkdown = '### Contexto Geral\\n';\nmaterialMarkdown += `Vistoria ID: ${vistoriaId}\\n`;\nmaterialMarkdown += `Período: ${new Date(openedAt).toLocaleString('pt-BR')} - ${new Date(closedAt).toLocaleString('pt-BR')}\\n`;\nmaterialMarkdown += `Total de registros: ${stats.total}\\n\\n`;\n\nmaterialMarkdown += '### Achados\\n';\nconst achados = messages.filter(m => m.kind === 'text' && m.content.length > 10);\nif (achados.length > 0) {\n  achados.forEach((msg, idx) => {\n    materialMarkdown += `${idx + 1}) ${msg.content}\\n`;\n  });\n} else {\n  materialMarkdown += 'Nenhum achado textual registrado.\\n';\n}\nmaterialMarkdown += '\\n';\n\nmaterialMarkdown += '### Evidências\\n';\nconst evidencias = messages.filter(m => m.kind !== 'text');\nif (evidencias.length > 0) {\n  evidencias.forEach(msg => {\n    if (msg.kind === 'image') {\n      materialMarkdown += `- #${msg.idx} (imagem): ${msg.content}\\n`;\n    } else if (msg.kind === 'audio') {\n      materialMarkdown += `- #${msg.idx} (áudio): ${msg.content}\\n`;\n    } else if (msg.kind === 'doc') {\n      materialMarkdown += `- #${msg.idx} (documento): ${msg.content}\\n`;\n    } else if (msg.kind === 'location') {\n      materialMarkdown += `- #${msg.idx} (localização): ${msg.content}\\n`;\n    }\n  });\n} else {\n  materialMarkdown += 'Nenhuma evidência multimídia registrada.\\n';\n}\nmaterialMarkdown += '\\n';\n\nmaterialMarkdown += '### Ações Recomendadas\\n';\nmaterialMarkdown += '1) Revisar achados identificados\\n';\nmaterialMarkdown += '2) Validar evidências multimídia\\n';\nmaterialMarkdown += '3) Gerar relatório final consolidado\\n\\n';\n\nmaterialMarkdown += '### Itens em Aberto / Dúvidas\\n';\nmaterialMarkdown += 'A definir após análise detalhada.\\n\\n';\n\nmaterialMarkdown += '### Linha do Tempo Sintética\\n';\nmessages.forEach(msg => {\n  const time = new Date(msg.ts).toLocaleTimeString('pt-BR');\n  materialMarkdown += `- #${msg.idx} (${time}): ${msg.content.substring(0, 60)}${msg.content.length > 60 ? '...' : ''}\\n`;\n});\n\n// CONSTRUIR MATERIAL LIMPO PARA IA\nlet materialClean = `Vistoria ${vistoriaId}.\\n\\n`;\nmaterialClean += 'ACHADOS:\\n';\nif (achados.length > 0) {\n  achados.forEach((msg, idx) => {\n    materialClean += `${idx + 1}. ${msg.content}\\n`;\n  });\n} else {\n  materialClean += 'Nenhum achado registrado.\\n';\n}\n\nif (evidencias.length > 0) {\n  materialClean += '\\nEVIDÊNCIAS MULTIMÍDIA:\\n';\n  evidencias.forEach(msg => {\n    materialClean += `- ${msg.kind.toUpperCase()}: ${msg.content}\\n`;\n  });\n}\n\n// PAYLOAD PARA BANCO DE DADOS\nconst dbPayload = {\n  vistoria_id: vistoriaId,\n  chat_id: chatId,\n  user_id: userId,\n  username: username,\n  opened_at: openedAt,\n  closed_at: closedAt,\n  messages_raw: JSON.stringify(messages),\n  material_unico_markdown: materialMarkdown,\n  material_unico_clean: materialClean,\n  stats_total: stats.total,\n  stats_texto: stats.texto,\n  stats_audio: stats.audio,\n  stats_imagem: stats.imagem,\n  stats_doc: stats.doc,\n  stats_location: stats.location,\n  status: 'concluída'\n};\n\n// MENSAGEM PARA USUÁRIO\nconst userMessage = `✅ Perfeito! Consolidei o material da vistoria ${vistoriaId} e salvei no sistema.\\n\\n📊 Você receberá o retorno assim que a análise for concluída.`;\n\n// DIAGNÓSTICOS\nconst diagnostics = {\n  vistoria_id: vistoriaId,\n  contagem: stats,\n  observacao: `Sessão encerrada com sucesso. ${stats.total} mensagens processadas.`\n};\n\nreturn [{\n  json: {\n    db_payload: dbPayload,\n    user_message: userMessage,\n    diagnostics: diagnostics,\n    chat_id: chatId\n  }\n}];"
+      },
+      "id": "consolidate_material",
+      "name": "Consolidate Material",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "VISTORIA_FINAL_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "Vistoria_Completa"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "vistoria_id": "={{ $json.db_payload.vistoria_id }}",
+            "chat_id": "={{ $json.db_payload.chat_id }}",
+            "user_id": "={{ $json.db_payload.user_id }}",
+            "username": "={{ $json.db_payload.username }}",
+            "opened_at": "={{ $json.db_payload.opened_at }}",
+            "closed_at": "={{ $json.db_payload.closed_at }}",
+            "messages_raw": "={{ $json.db_payload.messages_raw }}",
+            "material_markdown": "={{ $json.db_payload.material_unico_markdown }}",
+            "material_clean": "={{ $json.db_payload.material_unico_clean }}",
+            "stats_total": "={{ $json.db_payload.stats_total }}",
+            "stats_texto": "={{ $json.db_payload.stats_texto }}",
+            "stats_audio": "={{ $json.db_payload.stats_audio }}",
+            "stats_imagem": "={{ $json.db_payload.stats_imagem }}",
+            "status": "={{ $json.db_payload.status }}"
+          }
+        }
+      },
+      "id": "save_final_material",
+      "name": "Save Final Material",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [1200, 400]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "SESSIONS_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "Vistoria_Sessions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "concluída",
+            "closed_at": "={{ $('Consolidate Material').first().json.db_payload.closed_at }}"
+          }
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "vistoria_id",
+              "keyValue": "={{ $('Consolidate Material').first().json.db_payload.vistoria_id }}"
+            }
+          ]
+        }
+      },
+      "id": "close_session",
+      "name": "Close Session",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [1420, 400]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Consolidate Material').first().json.chat_id }}",
+        "text": "={{ $('Consolidate Material').first().json.user_message }}",
+        "additionalFields": {}
+      },
+      "id": "send_conclusion",
+      "name": "Send Conclusion",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1640, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "id": "send_no_session",
+      "name": "Send No Session Warning",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [980, 500],
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "SESSIONS_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "Vistoria_Sessions"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $('Telegram Trigger').first().json.message.chat.id.toString() }}"
+            },
+            {
+              "keyName": "status",
+              "keyValue": "ativa"
+            }
+          ]
+        },
+        "options": {
+          "limit": 1
+        }
+      },
+      "id": "get_active_session",
+      "name": "Get Active Session",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [320, 400]
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get User",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Active Session",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Session Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session Manager": {
+      "main": [
+        [
+          {
+            "node": "Router Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router Action": {
+      "main": [
+        [
+          {
+            "node": "Send Denied",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Session Messages",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consolidate Material",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send No Session Warning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Session": {
+      "main": [
+        [
+          {
+            "node": "Send Session Started",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session Messages": {
+      "main": [
+        [
+          {
+            "node": "Send Collected Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidate Material": {
+      "main": [
+        [
+          {
+            "node": "Save Final Material",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Final Material": {
+      "main": [
+        [
+          {
+            "node": "Close Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Session": {
+      "main": [
+        [
+          {
+            "node": "Send Conclusion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-19T00:00:00.000Z",
+  "versionId": "2.0"
+}

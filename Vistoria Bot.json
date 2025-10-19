@@ -1,0 +1,546 @@
+{
+  "name": "Vistoria Bot (Telegram + Supabase) - FIX",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "8c467ea6-b006-4a9c-b06c-404e54c454cc",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -64,
+        -128
+      ],
+      "webhookId": "f8124dee-3345-4207-b37b-e080b14de64b",
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "0nirjSTshTd9obPa",
+          "mode": "list",
+          "cachedResultName": "Users",
+          "cachedResultUrl": "/projects/afiVhyE6MHlxcJZa/datatables/0nirjSTshTd9obPa"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id_telegram_user",
+              "keyValue": "={{ $('Telegram Trigger').item.json.message.from.id.toString() }}"
+            }
+          ]
+        }
+      },
+      "id": "8c287f1e-0c40-4bb7-a4da-5a50bef32852",
+      "name": "Get row(s)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        48,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tentar verificar se o usuário foi encontrado\nlet userFound = false;\n\ntry {\n  const getRowsNode = $('Get row(s)');\n  if (getRowsNode && getRowsNode.all()) {\n    userFound = getRowsNode.all().length > 0;\n  }\n} catch (error) {\n  // Se Get row(s) não tem dados, userFound permanece false\n  userFound = false;\n}\n\n// Retornar os dados necessários\nreturn [\n  {\n    json: {\n      user_found: userFound,\n      telegram_data: $input.first().json\n    }\n  }\n];"
+      },
+      "id": "b58b9f5f-1f4d-40e5-a3dd-75e4d04e0957",
+      "name": "Check User",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_data.message.chat.id }}",
+        "text": "Você não tem permissão para utilizar este ChatBot.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a49d015d-1570-4c2c-8066-2751fe4fdc27",
+      "name": "Send a text message (Denied)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        496,
+        -240
+      ],
+      "webhookId": "f7875fc3-883f-47f5-b429-cea9e13e3c56",
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "Suas informações foram salvas com sucesso!",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "1eb2aa51-e1bb-4132-b922-ccffb35a3885",
+      "name": "Send a text message (Allowed)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1616,
+        -128
+      ],
+      "webhookId": "997e46dc-f403-4889-9994-17063207ac27",
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "= Se a mensagem abaixo possuir /start somente espere a próxima mensagem. Se a mensagem possuir /end no final está na hora de vc transcrever tudo que foi dito e consolidar as informações.\n\n {{ $('Telegram Trigger').item.json.message.text }}.\n\nnão precisa informar coisas como:\n\nCompreendido! As instruções sobre `/start` e `/end` estão claras e foram aplicadas.\n\nsomente aguarde até receber os caracteres `/start` e `/end` na mesma frase para conslidar tudo.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        864,
+        -80
+      ],
+      "id": "1e947f48-fe26-474c-91d1-540f5eb3ac39",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_data.message.chat.id }}",
+        "text": "Para iniciar um novo registro de informações para o laudo digite / seguido da palavra start e identificador do chamado. Ex. /start-079-2025",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0fe743c8-9f34-428d-ba0c-d8070fe34451",
+      "name": "Send a text message (Allowed)1",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        224
+      ],
+      "webhookId": "997e46dc-f403-4889-9994-17063207ac27",
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.user_found }}",
+              "rightValue": "={{ false }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              },
+              "id": "afe5561c-e061-436d-8930-edf16df51220"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b11d8e2e-9042-4f75-aa80-6849ae46c708",
+      "name": "Verifica se User tem permissão",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        272,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f110c6cc-87f8-4dfa-ad54-c98217238a21",
+              "leftValue": "={{ $json.telegram_data.message.text }}",
+              "rightValue": "/start",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        -32
+      ],
+      "id": "759ce7ea-0181-428e-8d49-bd67074160a7",
+      "name": "Verifica se  /start foi digitado"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_data.message.chat.id }}",
+        "text": "Aguardando envio das informações",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "bbdb2d9f-559b-4805-89ab-fdd97d440c5d",
+      "name": "Aguarda envio das informações",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        -80
+      ],
+      "webhookId": "997e46dc-f403-4889-9994-17063207ac27",
+      "credentials": {
+        "telegramApi": {
+          "id": "18P5qci8VIUwl39h",
+          "name": "Telegram_Claudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        864,
+        112
+      ],
+      "id": "da80166c-b135-4055-8618-98450a25d3c4",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Fl2o2TqrK4EhBT7O",
+          "name": "transcreverVozApiClaudia"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        960,
+        112
+      ],
+      "id": "b735471b-e650-4ed9-a785-79281c81e994",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1424,
+        96
+      ],
+      "id": "731370ec-3e39-4b79-8d4c-ea56249fdaf0",
+      "name": "Wait",
+      "webhookId": "e5ccf5fd-aabb-49c7-83a9-5295d58a2aea"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "R40b56oSB3fSWyui",
+          "mode": "list",
+          "cachedResultName": "Info_laudos",
+          "cachedResultUrl": "/projects/afiVhyE6MHlxcJZa/datatables/R40b56oSB3fSWyui"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id_user": "={{ $json.result.chat.first_name }}",
+            "vistoria_Id": "111",
+            "message": "={{ $('AI Agent').item.json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id_user",
+              "displayName": "id_user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "vistoria_Id",
+              "displayName": "vistoria_Id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1424,
+        -128
+      ],
+      "id": "0fb20b3e-c991-437c-b2db-4e4dd97c56e4",
+      "name": "Insert row"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f110c6cc-87f8-4dfa-ad54-c98217238a21",
+              "leftValue": "={{ $('Telegram Trigger').item.json.message.text }}",
+              "rightValue": "/end",
+              "operator": {
+                "type": "string",
+                "operation": "endsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1168,
+        -80
+      ],
+      "id": "6dbfca31-0636-4611-9f73-3ea90d6d80f0",
+      "name": "Verifica se  /end foi digitado"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check User": {
+      "main": [
+        [
+          {
+            "node": "Verifica se User tem permissão",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Verifica se  /end foi digitado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifica se User tem permissão": {
+      "main": [
+        [
+          {
+            "node": "Send a text message (Denied)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Verifica se  /start foi digitado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifica se  /start foi digitado": {
+      "main": [
+        [
+          {
+            "node": "Aguarda envio das informações",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message (Allowed)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguarda envio das informações": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message (Allowed)": {
+      "main": [
+        []
+      ]
+    },
+    "Insert row": {
+      "main": [
+        [
+          {
+            "node": "Send a text message (Allowed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifica se  /end foi digitado": {
+      "main": [
+        [
+          {
+            "node": "Insert row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "60f37963-b3a2-4367-8938-cf3912137a5d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cfac0a70daa53901f2023c9bf565c793d2fe818a1fdd5875359b06f73b0a2066"
+  },
+  "id": "rilHCustNErQ4lef",
+  "tags": []
+}
